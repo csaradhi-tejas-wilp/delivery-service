@@ -9,22 +9,22 @@ import com.bits.pilani.deliveryservice.repository.DeliveryHistoryRepo;
 
 public class DeliveryActions {
 
-    // @Autowired
-    // private RabbitTemplate rabbitTemplate;
+    @Autowired
+    private RabbitTemplate rabbitTemplate;
 
-    // @Autowired
-    // DeliveryHistoryRepo deliveryHistoryRepo;
+    @Autowired
+    DeliveryHistoryRepo deliveryHistoryRepo;
 
-    // public void rejectDelivery(int id) {
-    //     DeliveryHistory delivery = deliveryHistoryRepo.findByDeliveryId(id);
-    //     delivery.setDeliveryRejected(true);
-    //     deliveryHistoryRepo.save(delivery);
+    public void rejectDelivery(int id) {
+        // DeliveryHistory delivery = deliveryHistoryRepo.findByDeliveryId(id);
+        // delivery.setDeliveryRejected(true);
+        // deliveryHistoryRepo.save(delivery);
 
-    //     rabbitTemplate.convertAndSend("deliveryQueue", delivery.getOrderId());
-    // }
+        // rabbitTemplate.convertAndSend("deliveryQueue", delivery.getOrderId());
+    }
 
-    // @RabbitListener(queues = "deliveryQueue")
-    // public void assignNewDelivery(Integer orderId) {
-    //     // Logic to assign delivery to another personnel
-    // }
+    @RabbitListener(queues = "deliveryQueue")
+    public void assignNewDelivery(Integer orderId) {
+        // Logic to assign delivery to another personnel
+    }
 }

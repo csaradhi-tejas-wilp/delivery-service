@@ -1,16 +1,19 @@
 package com.bits.pilani.deliveryservice.dto;
 
-import java.time.Duration;
 import java.time.LocalDateTime;
 
 import com.bits.pilani.deliveryservice.enums.DeliveryMessage;
 import com.fasterxml.jackson.annotation.JsonFormat;
 
+import lombok.AllArgsConstructor;
 import lombok.Getter;
+import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 @Getter
 @Setter
+@AllArgsConstructor
+@NoArgsConstructor
 public class DeliveryRequestDTO {
 
     private Integer deliveryId;
@@ -35,4 +38,9 @@ public class DeliveryRequestDTO {
     private Boolean rejected;
 
     private Boolean accepted;
+
+    public DeliveryRequestDTO(int orderId, LocalDateTime expectedTime){
+        this.orderId = orderId;
+        this.expectedTime = expectedTime;
+    }
 }
