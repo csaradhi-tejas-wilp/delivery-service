@@ -1,88 +1,104 @@
 package com.bits.pilani.deliveryservice.service;
 
+import java.time.LocalDateTime;
+import java.util.Collections;
 import java.util.List;
-import java.util.NoSuchElementException;
-import java.util.Optional;
 
-import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.dao.DataAccessException;
-import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
-import com.bits.pilani.deliveryservice.constant.DeliveryConstants;
-import com.bits.pilani.deliveryservice.dao.DeliveryDao;
-import com.bits.pilani.deliveryservice.entity.DeliveryDetailsEntity;
-import com.bits.pilani.deliveryservice.to.DeliveryTO;
-import com.bits.pilani.deliveryservice.exception.CustomException;
+import com.bits.pilani.deliveryservice.convertor.DeliveryConvertor;
+import com.bits.pilani.deliveryservice.dto.DeliveryRequestDTO;
+import com.bits.pilani.deliveryservice.entity.DeliveryHistory;
+import com.bits.pilani.deliveryservice.entity.DeliveryPersonnel;
+import com.bits.pilani.deliveryservice.enums.DeliveryMessage;
+import com.bits.pilani.deliveryservice.repository.DeliveryHistoryRepo;
+import com.bits.pilani.deliveryservice.repository.DeliveryPersonnelRepo;
 
 @Service
 public class DeliveryService {
 
-	@Autowired
-	DeliveryDao deliveryDao;
+    @Autowired
+    private DeliveryHistoryRepo deliveryHistoryRepo;
 
-	public DeliveryTO getDeliveryByOrderId(int orderId) throws CustomException {
+    @Autowired
+    private RejectedDeliveryService rejectedDeliveryService;
 
-		DeliveryTO daoTO = new DeliveryTO();
+    @Autowired
+    private DeliveryPersonnelRepo deliveryPersonnelRepo;
 
-		try {
-			Optional<DeliveryDetailsEntity> deliveryDetail = deliveryDao.findById(orderId);
+    public DeliveryHistory assignDelivery(DeliveryRequestDTO deliveryRequest) {
+        deliveryRequest.setDelivered(false);
+        deliveryRequest.setAccepted(false);
+        deliveryRequest.setRejected(false);
+        deliveryRequest.setMessage(DeliveryMessage.NOT_PICKED_UP);
+        deliveryRequest.setStartTime(LocalDateTime.now());
+        deliveryRequest.setEndTime(deliveryRequest.getEndTime());
+        deliveryRequest.setExpectedTime(deliveryRequest.getExpectedTime());
+        deliveryRequest.setDeliveryPersonId(assignDeliveryPersonnel());
+        DeliveryHistory delivery = DeliveryConvertor.toDeliveryHistory(deliveryRequest);
+        return deliveryHistoryRepo.save(delivery);
+    }
 
-			if (deliveryDetail != null) {
-				daoTO.setDelivered(deliveryDetail.get().getDelivered());
-				daoTO.setDelivery_accepted(deliveryDetail.get().getDelivery_accepted());
-				daoTO.setDelivery_message(deliveryDetail.get().getDelivery_message());
-				daoTO.setDelivery_person_id(deliveryDetail.get().getDelivery_person_id());
-				daoTO.setOrder_id(deliveryDetail.get().getOrder_id());
-			}
-		} catch (NoSuchElementException e) {
-			throw new CustomException(HttpStatus.BAD_REQUEST, "Invalid request: " + DeliveryConstants.INVALID_CONFIG);
-		}
+    public DeliveryHistory acceptDelivery(int id) {
+        DeliveryHistory delivery = deliveryHistoryRepo.findByDeliveryId(id);
+        delivery.setAccepted(true);
+        delivery.setMessage(DeliveryMessage.DELIVERY_ACCEPTED);
 
-		return daoTO;
-	}
+        DeliveryHistory savedDelivery = deliveryHistoryRepo.save(delivery);
+        
+        DeliveryPersonnel deliveryPersonnel = deliveryPersonnelRepo.findByDeliveryPersonId(savedDelivery.getDeliveryPersonId());
+        deliveryPersonnel.setTakingDeliveries(false);
+        deliveryPersonnelRepo.save(deliveryPersonnel);
 
-	public List<DeliveryTO> getAllDeliveryDetails() throws CustomException {
-		try {
-			return deliveryDao.findAll().stream().map((deliveryEntity) -> {
-				DeliveryTO deliveryTO = new DeliveryTO();
-				BeanUtils.copyProperties(deliveryEntity, deliveryTO);
-				return deliveryTO;
-			}).toList();
-		} catch (DataAccessException e) {
-			throw CustomException.INTERNAL_SERVER_ERRROR;
+        //remove all other deliveries with this delivery personnel id;
+        unassignOtherDeliveries(savedDelivery.getDeliveryPersonId());
+        return savedDelivery;
+    }
 
-		}
-	}
+    public DeliveryHistory rejectDelivery(int id) {
+        DeliveryHistory delivery = deliveryHistoryRepo.findByDeliveryId(id);
+        delivery.setMessage(DeliveryMessage.DELIVERY_REJECTED);
+        delivery.setRejected(true);
+        deliveryHistoryRepo.save(delivery);
 
-	public DeliveryTO newDeliveryDetails(DeliveryTO deliveryTO) throws CustomException {
-		try {
-			DeliveryDetailsEntity deliveryEntity = new DeliveryDetailsEntity();
-			BeanUtils.copyProperties(deliveryTO, deliveryEntity);
-			deliveryEntity = deliveryDao.save(deliveryEntity);
-			BeanUtils.copyProperties(deliveryEntity, deliveryTO);
-		} catch (IllegalArgumentException  e) {
-			throw CustomException.INTERNAL_SERVER_ERRROR;
-		}
-		return deliveryTO;
-	}
+        rejectedDeliveryService.logRejectedDelivery(delivery.getOrderId(), delivery.getDeliveryPersonId());
+        DeliveryPersonnel deliveryPersonnel = deliveryPersonnelRepo.findByDeliveryPersonId(delivery.getDeliveryPersonId());
+        deliveryPersonnel.setTakingDeliveries(true);
+        deliveryPersonnelRepo.save(deliveryPersonnel);
+        return delivery;
+    }
 
-	public DeliveryTO updateDeliveryByOrderId(DeliveryTO deliveryTO, int orderId) throws CustomException {
+    public DeliveryHistory completeDelivery(int id, float rating) {
+        DeliveryHistory delivery = deliveryHistoryRepo.findByDeliveryId(id);
+        delivery.setDelivered(true);
+        delivery.setRating(rating);
+        delivery.setMessage(DeliveryMessage.DELIVERED_SUCCESSFULLY);
+        return deliveryHistoryRepo.save(delivery);
+    }
 
-		try {
-			Optional<DeliveryDetailsEntity> deliveryDetail = deliveryDao.findById(orderId);
-			if (deliveryDetail != null) {
-				DeliveryDetailsEntity deliveryEntity = new DeliveryDetailsEntity();
-				BeanUtils.copyProperties(deliveryTO, deliveryEntity);
-				deliveryEntity = deliveryDao.save(deliveryEntity);
-				BeanUtils.copyProperties(deliveryEntity, deliveryTO);
-			}
+    // private DeliveryHistory getDeliveryById(int id) {
+    //     return deliveryHistoryRepo.findByDeliveryId(id);
+    // }
 
-		} catch (DataAccessException e) {
-			throw new CustomException(HttpStatus.BAD_REQUEST, "Invalid request: " + DeliveryConstants.INVALID_CONFIG);
-		}
-		return deliveryTO;
-	}
+    private int assignDeliveryPersonnel(){
+        List<DeliveryPersonnel> availablePersonnel = deliveryPersonnelRepo.findByTakingDeliveriesTrue();
+
+        if (availablePersonnel.isEmpty()) {
+            throw new IllegalStateException("No available delivery personnel found.");
+        }
+
+        // Shuffle the list and return the first entry
+        Collections.shuffle(availablePersonnel);
+
+        return availablePersonnel.get(0).getDeliveryPersonId();
+    }
+
+    private void unassignOtherDeliveries(int deliveryPersonId){
+        List<DeliveryHistory> deliveries = deliveryHistoryRepo.findPendingDeliveriesByDeliveryPersonId(deliveryPersonId);        
+        deliveries.forEach(delivery -> {
+            //TODO: Put the deliveries back in queue.
+        });
+    }
 
 }
