@@ -54,12 +54,12 @@
         </dependency>
 
         <!-- Spring DevTools -->
-        <dependency>
+        <!-- <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-devtools</artifactId>
             <scope>runtime</scope>
             <optional>true</optional>
-        </dependency>
+        </dependency> -->
 
         <!-- Jakarta Persistence API -->
         <dependency>
